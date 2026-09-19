@@ -1,240 +1,107 @@
 import { analyse, nextSteps } from './engine.js';
-import { SAMPLES, DRILL } from './corpus.js';
 
-const $ = (id) => document.getElementById(id);
-let lang = (navigator.language || '').toLowerCase().startsWith('hi') ? 'hi' : 'en';
-let last = null;
-let lastText = '';
-let currentView = 'scan';
-const t = (obj) => (obj && obj[lang]) || (obj && obj.en) || '';
-
-const COPY = {
-  scam: { word:{en:'Scam',hi:'ठगी'}, line:{en:'Multiple fraud signals are working together. Do not act on this message.',hi:'ठगी के कई संकेत एक साथ काम कर रहे हैं। इस मैसेज पर कोई कार्रवाई न करें.'} },
-  suspicious: { word:{en:'Suspicious',hi:'संदिग्ध'}, line:{en:'Some risky signals are present. Pause and verify through a channel you already trust.',hi:'कुछ जोखिम वाले संकेत मिले हैं। रुकें और पहले से भरोसेमंद माध्यम से पुष्टि करें.'} },
-  safe: { word:{en:'No red flags',hi:'कोई बड़ा संकेत नहीं'}, line:{en:'No strong fraud tactics were detected. This does not prove the sender or link is legitimate.',hi:'ठगी की मजबूत चाल नहीं मिली। इससे भेजने वाला या लिंक अपने-आप असली साबित नहीं होता.'} },
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+const KEY = 'rakshak_v2_history';
+const LAB_KEY = 'rakshak_v2_lab';
+const samples = {
+  bank: `Dear Customer, your bank KYC will expire today. Your account will be blocked. Verify immediately at https://sbi-kyc-verify.xyz/update and share the OTP with our officer to avoid suspension. Do not tell anyone.`,
+  job: `Congratulations! Work from home and earn ₹5,000 daily. No experience needed. Join our Telegram group and complete a prepaid rating task. Deposit ₹499 to unlock today's higher payout.`,
+  upi: `Your UPI refund is pending. To receive the refund, confirm your UPI PIN on the secure portal: https://paytm-refund-login.top/claim. Refund expires in 30 minutes.`,
+  safe: `Your monthly account statement is ready. You can view it by opening your bank's official app. If you did not request this message, contact the number printed on your card.`
 };
+const labData = [
+  {from:'BANK ALERT', text:'Your debit card transaction was declined. If this was not you, open your bank app directly or call the number on the back of your card.', answer:'safe', why:'It recommends an independent verification channel and does not ask for OTP, PIN, payment or a message link.'},
+  {from:'KYC DESK', text:'KYC expires today. Keep the call connected, do not tell your family, and install AnyDesk so our officer can help you verify.', answer:'scam', why:'Secrecy + remote access + urgency is a high-risk manipulation chain.'},
+  {from:'DELIVERY', text:'Your parcel is held for a ₹25 address fee. Pay using this short link to release it today.', answer:'scam', why:'A tiny fee, urgency and a hidden destination are common extraction signals.'},
+  {from:'COLLEGE OFFICE', text:'Reminder: semester timetable has been updated. Please check the student portal from your usual bookmark. No action is required by reply.', answer:'safe', why:'It points to a known channel and does not request money or credentials in the message.'},
+  {from:'RECRUITER', text:'Guaranteed ₹8,000 daily. Send ₹999 registration fee to reserve your slot and share the payment screenshot.', answer:'scam', why:'Guaranteed income + advance payment + proof-of-payment request is an extraction pattern.'},
+  {from:'UPI ALERT', text:'Payment of ₹1,240 received. If you did not make this transaction, check your bank app or statement for details.', answer:'safe', why:'A transaction notification can mention the amount without asking you to share secrets or pay anyone.'},
+  {from:'POLICE NOTICE', text:'You are under investigation. Stay on video call, keep your camera on and transfer funds to a verification account immediately.', answer:'scam', why:'Authority pressure + isolation + money transfer is a classic social-engineering chain.'},
+  {from:'SHOP', text:'Thanks for your order. Your invoice is available in the official app under Orders. Contact support from the app if you need help.', answer:'safe', why:'The message directs you to a familiar app instead of a risky link or payment request.'}
+];
+let state = {last:null, source:'WhatsApp', labIndex:0, labScore:Number(localStorage.getItem(LAB_KEY)||0), expanded:false};
 
-const INTENT = {
-  pressure: {en:'Create urgency or fear',hi:'जल्दी या डर पैदा करना', desc:{en:'The message is trying to make you act before you have time to verify it.',hi:'मैसेज आपको बिना जाँच किए जल्दी कार्रवाई करने के लिए दबाव डाल रहा है.'}},
-  authority: {en:'Borrow trust from authority',hi:'किसी बड़ी संस्था का भरोसा लेना', desc:{en:'It uses an official-sounding identity to make the request feel legitimate.',hi:'यह आधिकारिक नाम या पहचान का इस्तेमाल करके माँग को असली दिखाता है.'}},
-  secrecy: {en:'Keep you isolated',hi:'आपको अकेला रखना', desc:{en:'It discourages you from asking family, friends or the real organisation for a second opinion.',hi:'यह आपको परिवार, दोस्तों या असली संस्था से पुष्टि करने से रोकने की कोशिश करता है.'}},
-  extraction: {en:'Get money or credentials',hi:'पैसे या गोपनीय जानकारी लेना', desc:{en:'The clearest danger is the requested payment, OTP, PIN, password or other sensitive action.',hi:'सबसे बड़ा खतरा पैसे, OTP, PIN, पासवर्ड या दूसरी संवेदनशील जानकारी की माँग है.'}},
-  channel: {en:'Move you to a risky channel',hi:'आपको असुरक्षित माध्यम पर ले जाना', desc:{en:'It tries to move the conversation to a personal number, remote-access tool or suspicious link.',hi:'यह बातचीत को निजी नंबर, रिमोट ऐप या संदिग्ध लिंक की तरफ ले जा रहा है.'}},
-  safe: {en:'Inform, not pressure',hi:'सिर्फ़ सूचना देना', desc:{en:'No strong risky request was detected. Still verify independently when the message matters.',hi:'कोई मजबूत जोखिम वाली माँग नहीं मिली। फिर भी महत्वपूर्ण मामलों में स्वतंत्र रूप से पुष्टि करें.'}},
-};
-
-/* ------------------------------ navigation */
-document.querySelectorAll('.nav__item').forEach((tab) => tab.addEventListener('click', () => {
-  const view = tab.dataset.view;
-  currentView = view;
-  document.querySelectorAll('.nav__item').forEach((x) => x.classList.toggle('is-active', x === tab));
-  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('is-active', v.dataset.view === view));
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}));
-
-$('lang').addEventListener('click', () => {
-  lang = lang === 'en' ? 'hi' : 'en';
-  $('lang').setAttribute('aria-pressed', String(lang === 'hi'));
-  if (last) { renderMarked(lastText, last.spans); renderReport(last); }
-  if (current) renderQuestion();
-  persistPrefs();
-});
-
-function persistPrefs() {
-  try { localStorage.setItem('rakshak-lang', lang); } catch {}
+function getHistory(){ try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return[]} }
+function setHistory(h){ localStorage.setItem(KEY, JSON.stringify(h.slice(0,30))); }
+function saveScan(result, source, text){
+  const item={id:Date.now(), date:new Date().toISOString(), source, text:text.slice(0,500), score:result.score, verdict:result.verdict, findings:result.findings.map(x=>x.id), links:result.stats.links};
+  setHistory([item,...getHistory()]); renderDashboard(); return item;
 }
-try {
-  const saved = localStorage.getItem('rakshak-lang');
-  if (saved === 'en' || saved === 'hi') lang = saved;
-} catch {}
-
-/* ------------------------------ scanner */
-function setHint(message = '') { $('inputHint').textContent = message; }
-function updateCount() {
-  const n = $('input').value.length;
-  $('charCount').textContent = `${n.toLocaleString()} / 5,000`;
-  $('charCount').classList.toggle('is-near-limit', n > 4500);
+function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function markEvidence(text, spans){
+  if(!spans?.length) return esc(text).replace(/\n/g,'<br>');
+  const sorted=[...spans].sort((a,b)=>a.start-b.start); let out='', pos=0;
+  for(const sp of sorted){if(sp.start<pos) continue; out+=esc(text.slice(pos,sp.start)); const cls=sp.family==='pressure'?'pressure':sp.family==='authority'?'authority':sp.family==='secrecy'?'secrecy':sp.family==='channel'?'channel':'extraction'; out+=`<mark class="${cls}" title="${esc(sp.title||'Signal')}">${esc(text.slice(sp.start,sp.end))}</mark>`; pos=sp.end;}
+  out+=esc(text.slice(pos)); return out.replace(/\n/g,'<br>');
 }
-$('input').addEventListener('input', updateCount);
-$('input').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') run(); });
-
-async function pasteFromClipboard() {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (!text) throw new Error('empty');
-    $('input').value = text.slice(0, 5000); updateCount(); setHint(''); $('input').focus();
-    if ($('input').value.trim().length >= 8) toast(lang === 'hi' ? 'मैसेज paste हो गया — Analyse दबाएँ।' : 'Message pasted — press Analyse when ready.');
-  } catch {
-    setHint(lang === 'hi' ? 'ब्राउज़र ने clipboard की अनुमति नहीं दी। मैसेज यहाँ paste करें।' : 'Clipboard permission was not available. Paste the message into the box.');
-  }
+function intent(result){
+  const ids=new Set(result.findings.map(f=>f.id));
+  if(ids.has('credentials')) return ['Harvest credentials','The sender is trying to obtain an OTP, PIN, password or card detail.','CREDENTIAL THEFT'];
+  if(ids.has('money')||ids.has('prize')||ids.has('jobscam')) return ['Extract money','The message creates a reason to send money, deposit a fee, or pay before receiving a promised benefit.','FINANCIAL EXTRACTION'];
+  if(ids.has('remote')) return ['Gain device control','The sender is trying to move the conversation into a remote-access or screen-sharing flow.','REMOTE ACCESS'];
+  if(ids.has('shortlink')||ids.has('lookalike')) return ['Redirect you to a risky destination','The visible message uses a link as the next step, so the destination needs independent verification.','LINK MANIPULATION'];
+  if(ids.has('secrecy')||ids.has('fear')) return ['Control the conversation','The script uses isolation or fear to reduce the chance that you verify with someone you trust.','SOCIAL ENGINEERING'];
+  return result.verdict==='safe'?['Provide information','This message looks informational and does not show a strong risky request.','LOW-INTERVENTION']:['Create pressure','The wording contains manipulation signals that deserve a pause and independent verification.','SOCIAL ENGINEERING'];
 }
-$('paste').addEventListener('click', pasteFromClipboard);
-
-function addSamples() {
-  $('samples').innerHTML = '';
-  SAMPLES.forEach((s, i) => {
-    const b = document.createElement('button'); b.className = 'sample'; b.type = 'button'; b.textContent = s.label;
-    b.setAttribute('aria-label', `Try sample: ${s.label}`);
-    b.addEventListener('click', () => { $('input').value = s.text; updateCount(); run(); });
-    b.dataset.index = i;
-    $('samples').appendChild(b);
-  });
+function chain(result){
+ const ids=new Set(result.findings.map(f=>f.id)); const parts=[];
+ if(ids.has('authority')) parts.push('FAKE AUTHORITY'); else if(ids.has('fear')) parts.push('FEAR');
+ if(ids.has('pressure')) parts.push('URGENCY');
+ if(ids.has('secrecy')) parts.push('ISOLATION');
+ if(ids.has('credentials')) parts.push('OTP / PIN ASK');
+ else if(ids.has('money')||ids.has('jobscam')||ids.has('prize')) parts.push('PAYMENT ASK');
+ else if(ids.has('remote')) parts.push('REMOTE ACCESS');
+ else if(result.stats.links) parts.push('LINK');
+ if(!parts.length) parts.push('INFORMATION');
+ return parts.map((x,i)=>`<div class="chain-node"><span>${String(i+1).padStart(2,'0')}</span><b>${x}</b></div>`).join('<i class="chain-arrow">→</i>');
 }
-addSamples();
-$('randomSample').addEventListener('click', () => {
-  const s = SAMPLES[Math.floor(Math.random() * SAMPLES.length)];
-  $('input').value = s.text; updateCount(); run();
-});
-$('check').addEventListener('click', run);
-$('edit').addEventListener('click', () => { $('input').focus(); });
-$('newScan').addEventListener('click', resetScan);
-$('clear').addEventListener('click', resetScan);
-
-function resetScan() {
-  $('input').value = ''; updateCount(); setHint(''); last = null; lastText = '';
-  $('report').hidden = true; $('idle').hidden = false; $('input').focus();
+function renderReport(result,text){
+ state.last={result,text,source:state.source}; $('#idleReport').hidden=true; $('#activeReport').hidden=false;
+ const score=result.score; const verdict=result.verdict; const title=verdict==='scam'?'Critical risk detected':verdict==='suspicious'?'Suspicious pattern detected':'No strong scam pattern';
+ const sub=verdict==='scam'?'Pause. Do not follow the requested action until you verify independently.':verdict==='suspicious'?'Treat this as untrusted until you verify the sender and destination.':'The message does not show a strong extraction or manipulation pattern.';
+ $('#scoreValue').textContent=score; $('#scoreRing').style.setProperty('--score',`${score*3.6}deg`); $('#verdictBadge').textContent=verdict.toUpperCase(); $('#verdictBadge').className=`verdict-badge ${verdict}`; $('#verdictTitle').textContent=title; $('#verdictSub').textContent=sub; $('#riskFill').style.width=score+'%';
+ $('#reportMetrics').innerHTML=[['SIGNALS',result.findings.length],['LINKS',result.stats.links],['WORDS',result.stats.words],['EVIDENCE',result.spans.length]].map(x=>`<div><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
+ const it=intent(result); $('#intentTitle').textContent=it[0]; $('#intentText').textContent=it[1]; $('#intentType').textContent=it[2]; $('#attackChain').innerHTML=chain(result);
+ $('#findings').innerHTML=result.findings.length?result.findings.map((f,i)=>`<article class="finding ${i>2&&!state.expanded?'collapsed':''}"><button class="finding-head" data-expand><span class="finding-index">${String(i+1).padStart(2,'0')}</span><span><b>${esc(f.title.en||f.title)}</b><small>${f.points} risk points · ${esc(f.family)}</small></span><strong>+</strong></button><div class="finding-body"><p>${esc(f.why.en||f.why)}</p></div></article>`).join(''):`<div class="clean-state">✓ No evidence pattern fired strongly enough to flag this message.</div>`;
+ const steps=nextSteps(result); $('#steps').innerHTML=steps.map((s,i)=>`<div class="action-row"><span>${i+1}</span><div><b>${esc(s.en)}</b></div></div>`).join('');
+ const urls=[...text.matchAll(/https?:\/\/[^\s]+/gi)].map(m=>m[0].replace(/[),.!?]+$/,'')); if(urls.length){$('#linkIntelMini').hidden=false; $('#linkIntelMini').innerHTML=`<div><span class="section-kicker">URL SIGNAL</span><b>${urls.length} destination${urls.length>1?'s':''} detected</b><small>Inspect before opening →</small></div><button id="inspectDetected" class="text-btn">Open URL Intel</button>`; $('#inspectDetected').onclick=()=>{route('url'); $('#urlInput').value=urls[0]; analyzeUrl();};}else $('#linkIntelMini').hidden=true;
+ $('#toggleEvidence').textContent=state.expanded?'Collapse extras':'Expand all';
+ saveScan(result,state.source,text); renderHighlighted(text,result.spans); window.scrollTo({top:document.querySelector('#reportPanel').offsetTop-90,behavior:'smooth'});
 }
-
-function run() {
-  const text = $('input').value.trim();
-  if (text.length < 8) {
-    setHint(lang === 'hi' ? 'कम से कम कुछ शब्दों वाला पूरा मैसेज डालें।' : 'Paste a longer message so Rakshak has enough context to read it.');
-    $('input').focus(); return;
-  }
-  setHint(''); lastText = text; last = analyse(text); renderMarked(text, last.spans); renderReport(last);
-  document.querySelector('#results').scrollIntoView({ behavior:'smooth', block:'start' });
+function renderHighlighted(text,spans){ $('#markedText').innerHTML=markEvidence(text,spans); }
+function analyze(){const text=$('#messageInput').value.trim(); if(!text){$('#inputHint').textContent='Paste a message first, or choose a sample.'; $('#messageInput').focus();return;} $('#inputHint').textContent='Analyzing locally…'; setTimeout(()=>{const result=analyse(text); renderReport(result,text); $('#inputHint').textContent='Analysis complete — evidence stays in this browser.';},220);}
+function route(name){
+ $$('.route').forEach(r=>r.classList.toggle('active',r.id===`route-${name}`)); $$('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.route===name)); location.hash=name; if(name==='dashboard') renderDashboard(); if(name==='lab') renderLab(); if(name==='scan') $('#messageInput').focus();
 }
-
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function renderMarked(text, spans) {
-  let html = '', cursor = 0;
-  for (const s of spans) {
-    if (s.start < cursor) continue;
-    html += esc(text.slice(cursor, s.start));
-    html += `<mark class="m-${s.family}" title="${esc(s.signal || s.family)}">${esc(text.slice(s.start, s.end))}</mark>`;
-    cursor = s.end;
-  }
-  html += esc(text.slice(cursor));
-  $('markedBody').innerHTML = html;
+function renderDashboard(){
+ const h=getHistory(); const scans=h.length, threats=h.filter(x=>x.verdict==='scam').length, avg=scans?Math.round(h.reduce((a,x)=>a+x.score,0)/scans):0, links=h.reduce((a,x)=>a+x.links,0);
+ $('#dashboardCards').innerHTML=[['TOTAL SCANS',scans,'local analyses'],['HIGH RISK',threats,'flagged as scam'],['AVG RISK',avg+'/100','across scans'],['LINKS INSPECTED',links,'found in messages']].map((x,i)=>`<div class="dash-card"><span>${['◌','⚠','◒','↗'][i]}</span><small>${x[0]}</small><b>${x[1]}</b><em>${x[2]}</em></div>`).join('');
+ $('#historyList').innerHTML=h.length?h.slice(0,12).map(x=>`<button class="history-row" data-history="${x.id}"><span class="history-score ${x.verdict}">${x.score}</span><span><b>${esc(x.text.replace(/\s+/g,' ').slice(0,72))}</b><small>${x.source} · ${new Date(x.date).toLocaleString()}</small></span><strong>→</strong></button>`).join(''):`<div class="empty-history">No local scans yet. Analyze a message to build your private threat timeline.</div>`;
+ const counts={}; h.forEach(x=>x.findings.forEach(id=>counts[id]=(counts[id]||0)+1)); const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6); $('#signalChart').innerHTML=top.length?top.map(([id,n])=>`<div class="signal-bar"><span>${id.replace(/([A-Z])/g,' $1')}</span><i><b style="width:${Math.min(100,n/h.length*100)}%"></b></i><em>${n}</em></div>`).join(''):`<div class="empty-history">Signal profile will appear after your first scan.</div>`;
 }
+function renderLab(){const q=labData[state.labIndex]; $('#labQuestion').innerHTML=`<div class="lab-meta"><span>${q.from}</span><i>incoming message</i></div><blockquote>${esc(q.text)}</blockquote>`; $('#labScore').textContent=state.labScore; $('#labProgress').textContent=`${state.labIndex} / ${labData.length}`; $('#labBar').style.width=(state.labIndex/labData.length*100)+'%'; $('#labFeedback').hidden=true; $('#guessScam').disabled=false; $('#guessSafe').disabled=false;}
+function answerLab(guess){const q=labData[state.labIndex]; const ok=guess===q.answer; if(ok) state.labScore++; localStorage.setItem(LAB_KEY,state.labScore); $('#labFeedback').hidden=false; $('#labFeedback').innerHTML=`<b>${ok?'Correct ✓':'Not quite — pause and inspect the ask.'}</b><p>${q.why}</p><button id="labNext" class="primary-btn">${state.labIndex===labData.length-1?'Restart lab':'Next scenario'} →</button>`; $('#guessScam').disabled=true; $('#guessSafe').disabled=true; $('#labNext').onclick=()=>{state.labIndex=state.labIndex===labData.length-1?0:state.labIndex+1; if(state.labIndex===0) state.labScore=0; renderLab();};}
+function analyzeUrl(){const raw=$('#urlInput').value.trim(); if(!raw){return;} let u; try{u=new URL(/^https?:\/\//i.test(raw)?raw:'https://'+raw)}catch{$('#urlResult').innerHTML='<div class="url-result"><div class="url-risk high">INVALID</div><h2>That does not look like a valid URL.</h2><p>Check the address and try again. No network request was made.</p></div>';return;}
+ const host=u.hostname.toLowerCase(), signals=[]; if(u.protocol!=='https:') signals.push(['Insecure protocol','The URL does not use HTTPS.']); const short=['bit.ly','tinyurl.com','t.co','cutt.ly','rb.gy','is.gd','ow.ly','shorturl.at']; if(short.some(x=>host===x||host.endsWith('.'+x))) signals.push(['Shortened destination','The visible address hides the final destination.']); if(host.split('.').length>3) signals.push(['Deep subdomain','Multiple subdomains can make impersonation harder to notice.']); if(/(login|verify|kyc|refund|secure|update|support|reward|bank|upi|wallet)/i.test(host)) signals.push(['Action-heavy domain','The domain contains words commonly used in lure pages.']); if(/(xn--|@|\d{1,3}(?:\.\d{1,3}){3})/.test(raw)) signals.push(['Unusual address form','The URL contains a pattern worth verifying before opening.']); const suspiciousTld=['xyz','top','click','buzz','icu','cfd','rest','monster','work','online']; if(suspiciousTld.includes(host.split('.').pop())) signals.push(['Uncommon TLD','This is not proof of fraud, but it adds a verification signal.']); const score=Math.min(95,signals.length*17+(u.protocol==='https:'?0:15)); const level=score>=55?'HIGH':score>=25?'CAUTION':'LOW'; $('#urlResult').innerHTML=`<div class="url-result"><div class="url-result-top"><div><span class="section-kicker">DESTINATION ASSESSMENT</span><h2>${esc(host)}</h2><p>${esc(u.protocol)} · ${esc(u.pathname||'/')}</p></div><div class="url-risk ${level.toLowerCase()}">${score}/100 · ${level}</div></div><div class="url-signal-list">${signals.length?signals.map(s=>`<div><span>⚠</span><b>${esc(s[0])}</b><small>${esc(s[1])}</small></div>`).join(''):'<div class="clean-state">✓ No obvious structural red flag detected. This does not prove the destination is safe.</div>'}</div><div class="url-actions"><button class="primary-btn" id="copyDomain">Copy domain</button><button class="ghost-btn" id="backScan">Analyze the message instead</button></div></div>`; $('#copyDomain').onclick=()=>copyText(host,'Domain copied'); $('#backScan').onclick=()=>route('scan');}
+function copyText(text,msg='Copied'){navigator.clipboard?.writeText(text).then(()=>toast(msg)).catch(()=>toast('Copy not available in this browser'));}
+function toast(msg){const t=$('#toast'); if(!t)return; t.hidden=false;t.textContent=msg;clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.hidden=true,2400);}
+function warningText(){if(!state.last)return ''; const {result,text}=state.last; return `⚠ RAKSHAK WARNING\nRisk: ${result.score}/100 (${result.verdict.toUpperCase()})\n\n${result.verdict==='safe'?'No strong scam pattern detected. Still verify independently when money or credentials are involved.':'Do not reply, pay, share OTP/PIN/password, or open the link until you verify the sender through an official channel.'}\n\nWhy it was flagged: ${result.findings.slice(0,4).map(f=>f.title.en).join(', ')||'No strong signal'}\n\nMessage preview: ${text.slice(0,220)}`;}
+function openModal(type){const m=$('#modalContent'); if(type==='family')m.innerHTML=`<span class="section-kicker">FAMILY PROTECTION CARD</span><h2>Send a clear warning, not panic.</h2><div class="warning-card"><div class="warning-card__logo">R</div><strong>⚠ ${state.last?.result.score||0}/100 RISK</strong><h3>Pause before you act.</h3><p>${state.last?.result.verdict==='safe'?'No strong scam pattern was detected. Still verify independently.':'Do not reply, pay, share OTP/PIN/password, or open the link. Verify through an official channel.'}</p><small>Generated locally by Rakshak</small></div><button class="primary-btn" id="copyFamilyModal">Copy warning text</button>`; else m.innerHTML=`<span class="section-kicker">INCIDENT REPORT</span><h2>Local incident record</h2><div class="incident"><div><span>Risk score</span><b>${state.last?.result.score}/100</b></div><div><span>Verdict</span><b>${state.last?.result.verdict}</b></div><div><span>Source</span><b>${state.last?.source}</b></div><div><span>Signals</span><b>${state.last?.result.findings.length}</b></div><hr><p>${esc(state.last?.text||'')}</p></div><button class="primary-btn" id="copyIncident">Copy report</button>`; $('#modalBackdrop').hidden=false; if($('#copyFamilyModal'))$('#copyFamilyModal').onclick=()=>copyText(warningText(),'Warning copied'); if($('#copyIncident'))$('#copyIncident').onclick=()=>copyText(warningText(),'Report copied');}
 
-function intentFor(r) {
-  const families = r.findings.map((f) => f.family);
-  const priority = ['extraction','channel','secrecy','pressure','authority'];
-  const family = priority.find((x) => families.includes(x)) || 'safe';
-  return INTENT[family];
+function wire(){
+ $$('.nav-btn,[data-route]').forEach(b=>b.addEventListener('click',()=>route(b.dataset.route)));
+ $$('.source').forEach(b=>b.onclick=()=>{$$('.source').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.source=b.dataset.source;});
+ $('#messageInput').oninput=e=>$('#charCount').textContent=`${e.target.value.length} / 5000`;
+ $('#analyzeBtn').onclick=analyze; $('#clearBtn').onclick=()=>{$('#messageInput').value='';$('#charCount').textContent='0 / 5000';$('#inputHint').textContent='';}; $('#newScan').onclick=()=>{$('#activeReport').hidden=true;$('#idleReport').hidden=false;};
+ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyze();});
+ [['sample1','bank'],['sample2','job'],['sample3','upi'],['sample4','safe']].forEach(([id,k])=>$('#'+id).onclick=()=>{$('#messageInput').value=samples[k];$('#messageInput').dispatchEvent(new Event('input'));}); $('#randomBtn').onclick=()=>{const k=Object.keys(samples)[Math.floor(Math.random()*4)];$('#messageInput').value=samples[k];$('#messageInput').dispatchEvent(new Event('input'));};
+ $('#toggleEvidence').onclick=()=>{state.expanded=!state.expanded;if(state.last)renderReport(state.last.result,state.last.text);};
+ $('#familyBtn').onclick=()=>openModal('family'); $('#incidentBtn').onclick=()=>openModal('incident'); $('#copyBtn').onclick=()=>copyText(warningText(),'Analysis copied'); $('#cardBtn').onclick=()=>openModal('family'); $('#modalClose').onclick=()=>$('#modalBackdrop').hidden=true; $('#modalBackdrop').onclick=e=>{if(e.target===e.currentTarget)e.currentTarget.hidden=true};
+ $('#urlAnalyze').onclick=analyzeUrl; $('#urlClear').onclick=()=>{$('#urlInput').value='';$('#urlResult').innerHTML='<div class="idle-report compact"><div class="url-globe">◎</div><span class="section-kicker">URL INTELLIGENCE</span><h2>Paste a URL to begin.</h2><p>Domain, protocol, shortener and impersonation patterns will be surfaced here.</p></div>';};
+ $('#guessScam').onclick=()=>answerLab('scam');$('#guessSafe').onclick=()=>answerLab('safe');
+ $('#clearHistory').onclick=()=>{localStorage.removeItem(KEY);renderDashboard();}; $('#wipeAll').onclick=()=>{localStorage.removeItem(KEY);localStorage.removeItem(LAB_KEY);location.reload();}; $('#clearDataBtn').onclick=()=>{localStorage.removeItem(KEY);localStorage.removeItem(LAB_KEY);toast('Local history cleared');};
+ $('#menuBtn').onclick=()=>$('#quickMenu').hidden=!$('#quickMenu').hidden;
+ window.addEventListener('hashchange',()=>route((location.hash||'#scan').slice(1))); renderDashboard(); renderLab();
 }
-
-function renderReport(r) {
-  $('idle').hidden = true; $('report').hidden = false;
-  const copy = COPY[r.verdict] || COPY.safe;
-  const stamp = $('stamp'); stamp.className = `verdict stamp--${r.verdict}`;
-  $('stampWord').textContent = t(copy.word); $('stampScore').textContent = r.score;
-  $('verdictLine').textContent = t(copy.line);
-  $('meterFill').style.width = `${r.score}%`;
-  $('meterFill').parentElement.className = `meter meter--${r.verdict}`;
-  stamp.classList.remove('stamp--press'); void stamp.offsetWidth; stamp.classList.add('stamp--press');
-
-  $('reportStats').innerHTML = [
-    ['Words', r.stats.words || 0], ['Links', r.stats.links || 0], ['Phone numbers', r.stats.phones || 0], [`${r.findings.length} signals`, r.findings.length ? 'fired' : 'clear']
-  ].map(([a,b]) => `<span class="stat"><b>${esc(b)}</b> ${esc(a)}</span>`).join('');
-
-  const intent = intentFor(r);
-  $('intentTitle').textContent = t(intent);
-  $('intentText').textContent = t(intent.desc);
-  $('intentCard').className = `intent-card intent--${r.findings[0]?.family || 'safe'}`;
-
-  const list = $('findings'); list.innerHTML = '';
-  const items = [...r.findings, ...r.credits];
-  if (!items.length) {
-    const li = document.createElement('li'); li.className = 'finding';
-    li.innerHTML = `<div class="finding__name">${lang === 'hi' ? 'कोई मजबूत संकेत नहीं मिला' : 'No strong signal fired'}</div><p class="finding__why">${lang === 'hi' ? 'फिर भी लिंक और sender को स्वतंत्र रूप से verify करें।' : 'Still verify the sender and destination independently before acting.'}</p>`;
-    list.appendChild(li);
-  }
-  items.forEach((f) => {
-    const li = document.createElement('li'); li.className = `finding ${f.points < 0 ? 'finding--credit' : ''}`;
-    const evidence = (f.evidence || []).map((e) => `<span class="ev">${esc(e.length > 55 ? `${e.slice(0,52)}…` : e)}</span>`).join('');
-    li.innerHTML = `<div class="finding__top"><span class="finding__name">${esc(t(f.title))}</span><span class="finding__pts">${f.points < 0 ? '' : '+'}${f.points}</span></div><p class="finding__why">${esc(t(f.why))}</p>${evidence ? `<div class="finding__ev">${evidence}</div>` : ''}`;
-    list.appendChild(li);
-  });
-
-  $('steps').innerHTML = '';
-  nextSteps(r).forEach((st) => { const li = document.createElement('li'); li.textContent = t(st); $('steps').appendChild(li); });
-  renderLinks(lastText);
-}
-
-function extractUrls(text) { return text.match(/\b(?:https?:\/\/|www\.)[^\s<>]+/gi) || []; }
-function getDomain(raw) {
-  try { return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.toLowerCase(); } catch { return raw.replace(/^https?:\/\//i,'').split('/')[0].toLowerCase(); }
-}
-function renderLinks(text) {
-  const urls = extractUrls(text); const box = $('linksPanel');
-  if (!urls.length) { box.hidden = true; box.innerHTML = ''; return; }
-  box.hidden = false;
-  const rows = urls.slice(0,5).map((url) => {
-    const clean = url.replace(/[),.;]+$/,'');
-    const domain = getDomain(clean);
-    const risky = /bit\.ly|tinyurl|cutt\.ly|rb\.gy|t\.me|\.xyz\b|\.top\b|\.buzz\b|\.click\b|\.icu\b|\.link\b|\.cfd\b|\.rest\b|\.online\b|\.shop\b|\.work\b/i.test(domain) || /^http:\/\//i.test(clean);
-    const reason = risky ? (lang === 'hi' ? 'सावधानी: लिंक/डोमेन जाँचें' : 'Caution: inspect before opening') : (lang === 'hi' ? 'लिंक मिला' : 'Link detected');
-    return `<div class="link-row"><div><code>${esc(clean)}</code><small>${esc(domain)}</small></div><span class="${risky ? 'link-flag' : 'link-ok'}">${reason}</span></div>`;
-  }).join('');
-  box.innerHTML = `<strong>${lang === 'hi' ? 'लिंक का quick check — Rakshak उन्हें open नहीं करता' : 'Quick link check — Rakshak never opens these links'}</strong><p class="link-note">${lang === 'hi' ? 'डोमेन को खुद official app/site से मिलाएँ।' : 'Compare the domain with the official app or site you already trust.'}</p>${rows}`;
-}
-
-/* ------------------------------ sharing */
-function warningText() {
-  if (!last) return '';
-  const copy = COPY[last.verdict];
-  const top = last.findings.slice(0,3).map((f) => `• ${t(f.title)}`).join('\n');
-  const head = lang === 'hi' ? `सावधान — Rakshak ने इसे ${t(copy.word)} पढ़ा (जोखिम ${last.score}/100)` : `Rakshak read this as ${t(copy.word).toLowerCase()} (risk ${last.score}/100)`;
-  const tail = lang === 'hi' ? 'जवाब न दें। लिंक न खोलें। OTP/PIN न बताएँ। पैसे कटे हों तो cybercrime.gov.in या 1930 पर तुरंत रिपोर्ट करें।' : 'Do not reply or open links. Never share an OTP/PIN. If money has left your account, use the official cybercrime reporting route or 1930 promptly.';
-  return `${head}\n\n${top || (lang === 'hi' ? 'कोई मजबूत संकेत नहीं मिला।' : 'No strong signal fired.')}\n\n${tail}\n\n— Checked with Rakshak`;
-}
-function analysisText() {
-  if (!last) return '';
-  const copy = COPY[last.verdict];
-  const intent = intentFor(last);
-  const findings = last.findings.length ? last.findings.map((f) => `- ${t(f.title)} (+${f.points})${f.evidence?.length ? ` — ${f.evidence.join(', ')}` : ''}`).join('\n') : '- No strong signal fired';
-  const steps = nextSteps(last).map((s, i) => `${i+1}. ${t(s)}`).join('\n');
-  return `RAKSHAK ANALYSIS\nVerdict: ${t(copy.word)}\nRisk score: ${last.score}/100\nWhat it is trying to do: ${t(intent)}\n\nSignals:\n${findings}\n\nNext actions:\n${steps}\n\nPrivacy: analysed locally in this browser; Rakshak does not open links or upload message text.`;
-}
-function toast(msg) { const el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { el.hidden = true; }, 3200); }
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch {
-    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove(); return ok;
-  }
-}
-$('copy').addEventListener('click', async () => toast((await copyText(warningText())) ? (lang === 'hi' ? 'Warning copy हो गया।' : 'Warning copied. Send it to someone you trust.') : (lang === 'hi' ? 'Copy नहीं हो पाया।' : 'Copy was not available.')));
-$('copyReport').addEventListener('click', async () => toast((await copyText(analysisText())) ? (lang === 'hi' ? 'पूरा analysis copy हो गया।' : 'Full analysis copied.') : (lang === 'hi' ? 'Copy नहीं हो पाया।' : 'Copy was not available.')));
-$('share').addEventListener('click', async () => {
-  const text = warningText();
-  if (navigator.share) { try { await navigator.share({ title:'Rakshak warning', text }); return; } catch {} }
-  if (await copyText(text)) toast(lang === 'hi' ? 'Share API नहीं मिला — warning copy हो गया।' : 'Share is not available here, so the warning was copied instead.');
-});
-$('card').addEventListener('click', () => { if (!last) return; drawCard(); const a = document.createElement('a'); a.href = $('canvas').toDataURL('image/png'); a.download = `rakshak-${last.verdict}-${last.score}.png`; a.click(); toast(lang === 'hi' ? 'Warning card save हो गया।' : 'Warning card saved.'); });
-
-function drawCard() {
-  const c = $('canvas'), ctx = c.getContext('2d'), W = c.width; const tone = {scam:'#d94a45',suspicious:'#c98a19',safe:'#19795d'}[last.verdict];
-  ctx.fillStyle='#f5f8fb'; ctx.fillRect(0,0,W,W); ctx.fillStyle='#071a33'; ctx.fillRect(0,0,W,170);
-  ctx.fillStyle='#39c79d'; ctx.font='700 42px Arial'; ctx.fillText('RAKSHAK',70,105);
-  ctx.fillStyle='#fff'; ctx.font='700 26px Arial'; ctx.fillText('Understand before you act',70,142);
-  ctx.strokeStyle=tone; ctx.lineWidth=9; ctx.strokeRect(70,220,W-140,205); ctx.fillStyle=tone; ctx.font='700 100px Arial'; ctx.fillText(t(COPY[last.verdict].word),105,335); ctx.fillStyle='#15243a'; ctx.font='700 36px Arial'; ctx.fillText(`Risk ${last.score}/100`,105,385);
-  ctx.font='700 30px Arial'; ctx.fillText('What this message is doing',70,500);
-  ctx.font='400 26px Arial'; let y=555; last.findings.slice(0,4).forEach(f=>{ctx.fillText(`• ${t(f.title)}`,80,y);y+=47;});
-  ctx.fillStyle=tone; ctx.font='700 27px Arial'; y+=25; const advice=lang==='hi'?['जवाब न दें। लिंक न खोलें।','OTP / PIN किसी को न बताएँ।','पैसे कटे हों तो 1930 पर रिपोर्ट करें।']:['Do not reply. Do not open links.','Never share an OTP or PIN.','If money is gone, report it via the official route or 1930.']; advice.forEach(line=>{ctx.fillText(line,70,y);y+=43;});
-  ctx.fillStyle='#6b7d90';ctx.font='400 22px Arial';ctx.fillText('rakshak · browser-only · no message upload',70,W-75);
-}
-
-/* ------------------------------ practice */
-let order=[], step=0, score=0, streak=0, drillOpen=false, current=null;
-function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b}
-function startDrill(){order=shuffle(DRILL);step=0;score=0;streak=0;$('dTotal').textContent=order.length;$('dDone').hidden=true;$('dCard').hidden=false;$('dChoices').hidden=false;renderQuestion()}
-function renderQuestion(){current=order[step];drillOpen=false;$('dTell').hidden=true;$('dChoices').hidden=false;$('dIndex').textContent=step+1;$('dScore').textContent=score;$('dStreak').textContent=streak;$('dBar').style.width=`${(step/order.length)*100}%`;$('dText').textContent=current.text;$('dFrom').textContent=current.from||'Unknown sender'}
-$('dChoices').querySelectorAll('button').forEach((b)=>b.addEventListener('click',()=>{if(drillOpen)return;const guess=b.dataset.guess==='true';const wasRight=guess===current.scam;if(wasRight){score++;streak++}else streak=0;drillOpen=true;$('dScore').textContent=score;$('dStreak').textContent=streak;$('dChoices').hidden=true;$('dVerdict').textContent=wasRight?(lang==='hi'?'सही पकड़ा ✓':'Correct ✓'):(lang==='hi'?'यह छूट गया':'That one slipped past');$('dWhy').textContent=t(current.tell);$('dTell').hidden=false}));
-$('dNext').addEventListener('click',()=>{step++;if(step>=order.length){finishDrill();return}renderQuestion()});
-$('dAgain').addEventListener('click',startDrill);
-function finishDrill(){$('dBar').style.width='100%';$('dCard').hidden=true;$('dChoices').hidden=true;$('dTell').hidden=true;$('dDone').hidden=false;$('dFinal').textContent=lang==='hi'?`${score} / ${order.length} सही`:`${score} / ${order.length} correct`;$('dNote').textContent=score>=8?(lang==='hi'?'अच्छा pattern recognition. अब यही सवाल परिवार के किसी सदस्य के साथ करें।':'Strong pattern recognition. Try the drill with a family member too.'):(lang==='hi'?'फिर से करें और हर बार पूछें: “यह मैसेज मुझसे माँग क्या रहा है?”':'Run it again and ask one question every time: what is this message asking me to do?')}
-
-/* Keep the demo immediately usable. */
-startDrill();
-updateCount();
+wire(); route((location.hash||'#scan').slice(1));
