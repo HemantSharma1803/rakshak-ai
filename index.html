@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071a33" />
+  <meta name="description" content="Rakshak is a private, browser-only scam message explainer for SMS and WhatsApp text. It highlights pressure tactics, explains the evidence, and gives the next safe action." />
+  <meta property="og:title" content="Rakshak — Understand the message before you act" />
+  <meta property="og:description" content="Private scam-message analysis for Indian SMS and WhatsApp text. No upload. No account. No API key." />
+  <meta property="og:type" content="website" />
+  <title>Rakshak — Understand the message before you act</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23071a33'/><path d='M50 12 82 26v26c0 20-14 32-32 38-18-6-32-18-32-38V26z' fill='none' stroke='%2359d9b2' stroke-width='8'/><path d='M35 50l10 11 21-23' fill='none' stroke='%2359d9b2' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/css/rakshak.css" />
+</head>
+<body>
+<a class="skip" href="#scanner">Skip to scanner</a>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand__mark" aria-hidden="true">
+      <svg viewBox="0 0 48 48" width="30" height="30"><path d="M24 4 40 11v13c0 10-6.9 16.1-16 19-9.1-2.9-16-9-16-19V11z" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="round"/><path d="m15.5 23.5 5.2 5.2L32.5 16" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div><strong>Rakshak</strong><span lang="hi">रक्षक</span></div>
+  </div>
+
+  <nav class="nav" aria-label="Main navigation">
+    <button class="nav__item is-active" data-view="scan" type="button">Scanner</button>
+    <button class="nav__item" data-view="practice" type="button">Practice</button>
+    <button class="nav__item" data-view="about" type="button">How it works</button>
+  </nav>
+
+  <button id="lang" class="lang" type="button" aria-pressed="false" title="Switch language"><span>EN</span><span>हिं</span></button>
+</header>
+
+<main>
+  <section id="scanner" class="view is-active" data-view="scan">
+    <div class="hero">
+      <div class="hero__copy">
+        <div class="eyebrow"><span class="pulse"></span> PRIVATE · BROWSER-ONLY · NO ACCOUNT</div>
+        <h1>Understand the message<br /><em>before you act.</em></h1>
+        <p>Rakshak does more than call a message “scam”. It shows <strong>which words are applying pressure</strong>, what the sender wants, and what you should do next.</p>
+        <div class="hero__chips"><span>SMS</span><span>WhatsApp</span><span>Hindi + English + Hinglish</span></div>
+      </div>
+      <div class="hero__proof">
+        <div class="proof__icon">✓</div>
+        <div><strong>Your message stays here.</strong><span>No upload · No AI API · No tracking</span></div>
+      </div>
+    </div>
+
+    <div class="scanner-grid">
+      <section class="panel composer" aria-labelledby="input-title">
+        <div class="panel__head">
+          <div><span class="step">01</span><div><h2 id="input-title">Paste the message</h2><p>Use the exact text you received.</p></div></div>
+          <button id="paste" class="icon-btn" type="button" title="Paste from clipboard" aria-label="Paste from clipboard">↧</button>
+        </div>
+
+        <label class="sr-only" for="input">Message text</label>
+        <textarea id="input" maxlength="5000" spellcheck="false" placeholder="Example: Dear customer, your KYC will be blocked today. Update immediately…"></textarea>
+        <div class="composer__meta"><span id="charCount">0 / 5000</span><span>Ctrl/⌘ + Enter to scan</span></div>
+
+        <div class="sample-wrap">
+          <div class="sample-wrap__head"><span>Try a realistic example</span><button id="randomSample" type="button" class="text-btn">Surprise me ↗</button></div>
+          <div id="samples" class="samples"></div>
+        </div>
+
+        <div class="composer__actions">
+          <button id="check" class="btn btn--primary" type="button"><span>Analyse message</span><span>→</span></button>
+          <button id="clear" class="btn btn--ghost" type="button">Clear</button>
+        </div>
+        <p id="inputHint" class="input-hint" aria-live="polite"></p>
+      </section>
+
+      <section class="panel results" id="results" aria-live="polite">
+        <div id="idle" class="empty-state">
+          <div class="empty-state__shield"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4 40 11v13c0 10-6.9 16.1-16 19-9.1-2.9-16-9-16-19V11z" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="m15.5 23.5 5.2 5.2L32.5 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+          <span class="step">02</span><h2>Your evidence appears here</h2>
+          <p>Paste a message on the left. Rakshak checks pressure, authority, secrecy, requests for money or credentials, and unsafe channels.</p>
+          <div class="empty-state__mini"><span>01 · Detect signals</span><span>02 · Show evidence</span><span>03 · Give action</span></div>
+        </div>
+
+        <div id="report" class="report" hidden>
+          <div class="report__top">
+            <div class="verdict" id="stamp"><div class="verdict__ring"><span id="stampScore">0</span></div><div><span class="verdict__eyebrow">RISK ASSESSMENT</span><strong id="stampWord">Scam</strong></div></div>
+            <button id="newScan" class="btn btn--ghost btn--small" type="button">New scan</button>
+          </div>
+          <div class="meter"><span id="meterFill"></span></div>
+          <p class="report__line" id="verdictLine"></p>
+
+          <div class="report__stats" id="reportStats"></div>
+
+          <div class="intent-card" id="intentCard">
+            <div class="intent-card__icon" aria-hidden="true">↳</div>
+            <div><span class="intent-card__eyebrow">WHAT THIS MESSAGE IS TRYING TO DO</span><strong id="intentTitle">—</strong><p id="intentText">—</p></div>
+          </div>
+
+          <div class="marked-box">
+            <div class="marked-box__head"><div><span class="step">03</span><h3>Marked evidence</h3></div><button id="edit" class="text-btn" type="button">Edit text</button></div>
+            <p id="markedBody" class="marked-body"></p>
+            <div class="legend"><span class="legend--pressure">Pressure</span><span class="legend--authority">Authority</span><span class="legend--secrecy">Secrecy</span><span class="legend--extraction">The ask</span><span class="legend--channel">Channel</span></div>
+          </div>
+
+          <div class="section-head"><div><span class="step">04</span><h3>Why it fired</h3></div><span class="section-note">Every signal has evidence</span></div>
+          <ul id="findings" class="findings"></ul>
+
+          <div id="linksPanel" class="links-panel" hidden></div>
+
+          <div class="section-head"><div><span class="step">05</span><h3>What to do now</h3></div></div>
+          <ol id="steps" class="steps"></ol>
+
+          <div class="report-actions">
+            <button id="copy" class="btn btn--primary" type="button">Copy family warning</button>
+            <button id="copyReport" class="btn btn--ghost" type="button">Copy analysis</button>
+            <button id="share" class="btn btn--ghost" type="button">Share warning</button>
+            <button id="card" class="btn btn--ghost" type="button">Save card</button>
+          </div>
+          <p class="toast" id="toast" hidden></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="trust-strip">
+      <div><span class="trust-icon">⌁</span><strong>On-device by design</strong><span>The text never leaves this browser.</span></div>
+      <div><span class="trust-icon">◈</span><strong>Explainable</strong><span>No black-box verdict. You can see the trigger.</span></div>
+      <div><span class="trust-icon">◎</span><strong>Action-first</strong><span>Every risky result ends with a next step.</span></div>
+    </div>
+  </section>
+
+  <section class="view" data-view="practice">
+    <div class="practice-hero"><div><div class="eyebrow"><span class="pulse"></span> LEARN THE PATTERN</div><h1>Train your scam radar.</h1><p>Real alerts are mixed in with scams. The goal is not to fear every message — it is to notice what a message is asking you to do.</p></div><div class="practice-badge">10<br /><small>messages</small></div></div>
+    <div class="practice-shell panel">
+      <div class="scoreline"><div><span>QUESTION</span><strong><i id="dIndex">1</i> / <i id="dTotal">10</i></strong></div><div><span>SCORE</span><strong id="dScore">0</strong></div><div><span>STREAK</span><strong id="dStreak">0</strong></div></div>
+      <div class="bar"><span id="dBar"></span></div>
+      <article class="message-card" id="dCard"><div class="message-card__top"><span class="sender-dot"></span><div><strong id="dFrom">Unknown sender</strong><span>Message preview</span></div></div><p id="dText"></p></article>
+      <div class="choices" id="dChoices"><button class="choice choice--danger" data-guess="true" type="button"><span>⚠</span><b>It is a scam</b><small>Something is trying to push me</small></button><button class="choice choice--safe" data-guess="false" type="button"><span>✓</span><b>It is genuine</b><small>It informs without a risky ask</small></button></div>
+      <div class="tell" id="dTell" hidden><div class="tell__badge" id="dVerdict"></div><p id="dWhy"></p><button class="btn btn--primary" id="dNext" type="button">Next message →</button></div>
+      <div class="wrapup" id="dDone" hidden><div class="wrapup__score" id="dFinal"></div><p id="dNote"></p><button class="btn btn--primary" id="dAgain" type="button">Run the drill again</button></div>
+    </div>
+  </section>
+
+  <section class="view" data-view="about">
+    <div class="about-hero"><div class="eyebrow"><span class="pulse"></span> THE IDEA</div><h1>A scam is a script.<br /><em>Rakshak marks the script.</em></h1><p>Instead of asking you to trust a mysterious score, Rakshak points at the exact words creating urgency, borrowing authority, demanding secrecy, extracting money or credentials, or moving you to an unsafe channel.</p></div>
+    <div class="about-grid">
+      <article class="about-card"><span class="about-num">01</span><h2>Detect the move</h2><p>Signals cover pressure, fear, authority, secrecy, OTP/PIN requests, advance fees, prize and job bait, remote-access apps, shortened links and lookalike domains.</p></article>
+      <article class="about-card"><span class="about-num">02</span><h2>Show the evidence</h2><p>Triggered phrases are highlighted in the original message. Each finding carries an explanation and the text that caused it.</p></article>
+      <article class="about-card"><span class="about-num">03</span><h2>Give the next action</h2><p>Risky results turn into a short checklist: do not engage, verify through a trusted channel, and report financial loss quickly.</p></article>
+      <article class="about-card about-card--privacy"><span class="about-num">04</span><h2>Keep the message private</h2><p>The app is static JavaScript. There is no login, backend, analytics, database, or API key. Analysis happens in the browser.</p></article>
+    </div>
+    <div class="limits panel"><div><span class="eyebrow">IMPORTANT LIMIT</span><h2>Rakshak is a reading aid, not a truth machine.</h2></div><p>A clean result does not prove that a sender or link is legitimate. Never share an OTP, PIN or password because a message tells you to. For money already lost in India, use the official cybercrime reporting route or call <strong>1930</strong>.</p><a href="https://www.cybercrime.gov.in/" target="_blank" rel="noopener noreferrer">Open cybercrime.gov.in ↗</a></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div><strong>Rakshak</strong><span>Private scam-message explainer · built for the web</span></div>
+  <div><span class="build-badge">● Browser-only</span><a href="https://www.cybercrime.gov.in/" target="_blank" rel="noopener noreferrer">cybercrime.gov.in</a><span>·</span><b>1930</b></div>
+</footer>
+
+<canvas id="canvas" width="1200" height="1200" hidden></canvas>
+<noscript><div class="noscript">Rakshak needs JavaScript enabled because all analysis happens locally in your browser. No message is uploaded.</div></noscript>
+<script type="module" src="./assets/js/app.js"></script>
+</body>
+</html>
